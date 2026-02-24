@@ -23,6 +23,22 @@ npm run preview      # preview production build locally
 
 Pushes to `main` automatically deploy via GitHub Actions (`.github/workflows/deploy.yml`). The build output from `spark/dist/` is published to GitHub Pages. The Vite `base` is set to `/prototypes/` to match the Pages URL path.
 
+## Git Workflow
+
+- Branch off `main` for all new work
+- Branch naming: `feature/*`, `fix/*`, `chore/*`
+- Never commit directly to `main` — use a branch and PR
+- Commit messages in imperative tense (e.g. "Add round skip logic", not "Added...")
+- Squash or keep commits logical before merging
+
+### Branch hygiene before coding
+
+- Before starting any coding work, check the current branch with `git branch --show-current` and ensure it's up to date with main; flag any issues
+- If on `main`, automatically create and switch to a new feature branch before making changes
+- Branch naming convention: use descriptive kebab-case names (e.g., `add-user-profile`, `fix-login-bug`, `refactor-auth-flow`)
+- If already on a non-main branch, continue working on that branch
+- This ensures all work is isolated and can be reviewed via pull requests
+
 ## Architecture: The Missing Link (`spark/src/App.jsx`)
 
 The entire app lives in a single file with three logical sections:
