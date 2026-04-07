@@ -22,11 +22,23 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: spark/package-lock.json
+          cache-dependency-path: |
+            spark/package-lock.json
+            links-with-friends/package-lock.json
+
       - run: npm install
         working-directory: spark
       - run: npm run build
         working-directory: spark
+
+      - run: npm install
+        working-directory: links-with-friends
+      - run: npm run build
+        working-directory: links-with-friends
+
+      # Merge both builds: spark/dist is the root, lwf goes inside it
+      - run: cp -r links-with-friends/dist spark/dist/links-with-friends
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: spark/dist
