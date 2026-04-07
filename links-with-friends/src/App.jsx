@@ -5,17 +5,17 @@ var DEFAULT_ITEMS = [
   "Nutmeg","Clove","Chili Pepper","Cocoa","Turmeric","Saffron"
 ];
 var DEFAULT_FACTS = [
-  "Can be ground","Common in desserts","Dried berries",
+  "Can be used fresh","Common in desserts","Dried berries",
   "Grows above ground","Grows below ground","In pumpkin spice mix",
   "Native to India","Native to Indonesia","Native to the Americas",
   "Used as a dye"
 ];
 var DEFAULT_LINKS = [
-  [0,6],[0,3],[0,2],[0,0],[1,6],[1,5],[1,3],[1,0],[1,1],
-  [2,8],[2,3],[2,1],[3,6],[3,5],[3,4],[3,0],
-  [4,8],[4,5],[4,3],[4,2],[4,0],[5,7],[5,5],[5,3],[5,2],[5,0],
-  [6,7],[6,5],[6,3],[6,2],[6,0],[7,8],[7,3],[7,0],
-  [8,8],[8,3],[8,0],[8,1],[9,6],[9,4],[9,9],[9,0],[10,3],[10,9],
+  [0,6],[0,3],[0,2],[1,6],[1,5],[1,3],[1,1],
+  [2,8],[2,3],[2,1],[2,0],[3,6],[3,5],[3,4],[3,0],
+  [4,8],[4,5],[4,3],[4,2],[5,7],[5,5],[5,3],[5,2],
+  [6,7],[6,5],[6,3],[6,2],[7,8],[7,3],[7,0],
+  [8,8],[8,3],[8,1],[9,6],[9,4],[9,9],[9,0],[10,3],[10,9],
 ];
 
 function shuffle(arr) {
@@ -726,7 +726,7 @@ export default function ConceptLinksGame() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={playTurn} disabled={!canPlay}
             style={{ padding: "10px 24px", fontSize: 14, fontWeight: 700, fontFamily: MONO, background: canPlay ? GRAD : "#1a2138", color: canPlay ? "#0a0e17" : "#555", border: "none", borderRadius: 8, cursor: canPlay ? "pointer" : "default", opacity: canPlay ? 1 : 0.5 }}>
             Play
@@ -740,6 +740,10 @@ export default function ConceptLinksGame() {
               Clear
             </button>
           )}
+          <button onClick={function() { setPhase(PHASE.SETUP); }}
+            style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#555", border: "1px solid #1a2138", borderRadius: 8, cursor: "pointer", marginLeft: "auto" }}>
+            Quit
+          </button>
         </div>
 
         {gameLog.length > 0 && (
