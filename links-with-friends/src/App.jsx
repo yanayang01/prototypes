@@ -13,8 +13,8 @@ var DEFAULT_FACTS = [
 var DEFAULT_LINKS = [
   [0,6],[0,3],[0,2],[1,6],[1,5],[1,3],[1,1],
   [2,8],[2,3],[2,1],[2,0],[3,6],[3,5],[3,4],[3,0],
-  [4,8],[4,5],[4,3],[4,2],[5,7],[5,5],[5,3],[5,2],
-  [6,7],[6,5],[6,3],[6,2],[7,8],[7,3],[7,0],
+  [4,8],[4,5],[4,3],[4,2],[5,7],[5,5],[5,3],
+  [6,7],[6,5],[6,3],[7,8],[7,3],[7,2],[7,0],
   [8,8],[8,3],[8,1],[9,6],[9,4],[9,9],[9,0],[10,3],[10,9],
 ];
 
@@ -107,6 +107,8 @@ var FONT = "'DM Sans', 'Segoe UI', sans-serif";
 var MONO = "'Space Mono', monospace";
 var GRAD = "linear-gradient(135deg, #f0c27f, #fc5c7d)";
 var PC = ["#fc5c7d", "#7ecbf5"];
+var IC = "#60a5fa"; // item color (blue)
+var FC = "#4ade80"; // fact color (green)
 
 var CSS = "@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');" +
   "* { box-sizing: border-box; margin: 0; padding: 0; }" +
@@ -140,6 +142,8 @@ export default function ConceptLinksGame() {
 
   var _bonusDone = useState([false, false]); var bonusDone = _bonusDone[0]; var setBonusDone = _bonusDone[1];
   var _bonusSel = useState([]); var bonusSel = _bonusSel[0]; var setBonusSel = _bonusSel[1];
+  var _swapMode = useState(false); var swapMode = _swapMode[0]; var setSwapMode = _swapMode[1];
+  var _mustPlay = useState([false, false]); var mustPlay = _mustPlay[0]; var setMustPlay = _mustPlay[1];
 
   var _showMap = useState(false); var showMap = _showMap[0]; var setShowMap = _showMap[1];
 
@@ -177,7 +181,7 @@ export default function ConceptLinksGame() {
     setItemBag(cB); setFactBag(fB); setHands([h0, h1]);
     setBoardNodes([]); setBoardEdges([]); setScores([0, 0]);
     setChain([]); setAnchor(null); setBonusDone([false, false]); setBonusSel([]);
-    setConsecutiveSkips(0); setGraphPositions({}); setGraphH(200); setGameLog([]);
+    setConsecutiveSkips(0); setMustPlay([false, false]); setGraphPositions({}); setGraphH(200); setGameLog([]);
     setDice([null, null]); setDiceRolling(false); setDiceResult(null);
     setPhase(PHASE.DICE);
   }
@@ -290,17 +294,18 @@ export default function ConceptLinksGame() {
     var eSet = new Set();
     boardEdges.forEach(function(e) { eSet.add(e[0] + "-" + e[1]); eSet.add(e[1] + "-" + e[0]); });
     var sel = bonusSel.map(function(id) { return boardNodes.find(function(n) { return n.id === id; }); }).filter(Boolean);
-    var conn = [];
+    var conn = []; var wrong = 0;
     for (var i = 0; i < sel.length; i++) {
       for (var j = i + 1; j < sel.length; j++) {
         if ((sel[i].type === "item") === (sel[j].type === "item")) continue;
-        if (!linkMap[sel[i].id] || !linkMap[sel[i].id].has(sel[j].id)) continue;
-        if (eSet.has(sel[i].id + "-" + sel[j].id)) continue;
-        conn.push([sel[i].id, sel[j].id]);
+        if (!linkMap[sel[i].id] || !linkMap[sel[i].id].has(sel[j].id) || eSet.has(sel[i].id + "-" + sel[j].id)) {
+          wrong++;
+        } else {
+          conn.push([sel[i].id, sel[j].id]);
+        }
       }
     }
-    if (!conn.length) return { valid: false, reason: "No valid new connections among selected nodes." };
-    return { valid: true, score: conn.length * 5, connections: conn };
+    return { valid: true, score: conn.length * 5 - wrong * 5, connections: conn, wrong: wrong };
   }
 
   var validity = (function() {
@@ -323,7 +328,9 @@ export default function ConceptLinksGame() {
       var ns = scores.slice(); ns[currentPlayer] += r.score;
       setBoardEdges(ne); setScores(ns); setBonusSel([]);
       var bd = bonusDone.slice(); bd[currentPlayer] = true; setBonusDone(bd);
-      setGameLog(gameLog.concat([playerNames[currentPlayer] + " bonus: +" + r.score]));
+      var logMsg = playerNames[currentPlayer] + " bonus: +" + (r.connections.length * 5);
+      if (r.wrong > 0) logMsg += " -" + (r.wrong * 5) + " (" + r.wrong + " wrong)";
+      setGameLog(gameLog.concat([logMsg]));
       var next = 1 - currentPlayer;
       if (bd[next]) {
         setPhase(PHASE.END); setMessage("Game over!"); return;
@@ -357,18 +364,43 @@ export default function ConceptLinksGame() {
     var names = played.map(tn);
 
     setBoardNodes(nBN); setBoardEdges(ne2); setHands(nH); setItemBag(cB); setFactBag(fB);
-    setScores(ns2); setChain([]); setAnchor(null); setConsecutiveSkips(0);
+    setScores(ns2); setChain([]); setAnchor(null); setConsecutiveSkips(0); setSwapMode(false);
+    var nMP = mustPlay.slice(); nMP[currentPlayer] = false; setMustPlay(nMP);
     setGameLog(gameLog.concat([playerNames[currentPlayer] + " played " + names.join(" > ") + " (+" + r2.score + ")"]));
 
     var next2 = 1 - currentPlayer;
-    if (cB.length === 0 && fB.length === 0 && nH[0].length === 0 && nH[1].length === 0) { enterBonus(); return; }
-    if (cB.length === 0 && fB.length === 0 && nH[next2].length === 0) { enterBonus(); return; }
+    if (cB.length === 0 && fB.length === 0 && !canPlayerMove(nH[0], nBN, ne2) && !canPlayerMove(nH[1], nBN, ne2)) { enterBonus(); return; }
     setCurrentPlayer(next2); setMessage(playerNames[next2] + "'s turn.");
+  }
+
+  function canPlayerMove(hand, bn, be) {
+    if (!hand.length) return false;
+    if (!bn.length) {
+      var itemTiles = hand.filter(function(t) { return t.type === "item"; });
+      var factTiles = hand.filter(function(t) { return t.type === "fact"; });
+      return itemTiles.some(function(item) {
+        return factTiles.some(function(fact) {
+          var ck = "c" + item.index, fk = "f" + fact.index;
+          return linkMap[ck] && linkMap[ck].has(fk);
+        });
+      });
+    }
+    var eSet = new Set();
+    be.forEach(function(e) { eSet.add(e[0] + "-" + e[1]); eSet.add(e[1] + "-" + e[0]); });
+    return hand.some(function(tile) {
+      var tKey = tile.type === "item" ? "c" + tile.index : "f" + tile.index;
+      return bn.some(function(node) {
+        if ((node.type === "item") === (tile.type === "item")) return false;
+        if (!linkMap[node.id] || !linkMap[node.id].has(tKey)) return false;
+        if (eSet.has(node.id + "-" + tKey)) return false;
+        return true;
+      });
+    });
   }
 
   function enterBonus() {
     setPhase(PHASE.BONUS); setCurrentPlayer(0); setBonusDone([false, false]); setBonusSel([]);
-    setChain([]); setAnchor(null);
+    setChain([]); setAnchor(null); setSwapMode(false);
     setMessage("Bonus Round! Each player gets 1 turn.");
     setGameLog(function(g) { return g.concat(["--- Bonus Round ---"]); });
   }
@@ -382,22 +414,33 @@ export default function ConceptLinksGame() {
       if (bd[next]) { setPhase(PHASE.END); setMessage("Game over!"); return; }
       setCurrentPlayer(next); setMessage(playerNames[next] + "'s bonus turn."); return;
     }
-    var hand = hands[currentPlayer]; var cB = itemBag.slice(); var fB = factBag.slice();
-    var sw = chain.slice();
-    if (sw.length > 0) {
-      sw.forEach(function(i) { var t = hand[i]; if (t.type === "item") cB.push(t.index); else fB.push(t.index); });
-      var rem = hand.filter(function(_, i) { return !sw.includes(i); });
-      var nc = shuffle(cB); var nf = shuffle(fB);
-      var cr = sw.filter(function(j) { return hand[j].type === "item"; }).length;
-      var fr = sw.filter(function(j) { return hand[j].type === "fact"; }).length;
-      for (var i = 0; i < cr && nc.length > 0; i++) rem.push({ type: "item", index: nc.pop() });
-      for (var j = 0; j < fr && nf.length > 0; j++) rem.push({ type: "fact", index: nf.pop() });
-      var nH = hands.slice(); nH[currentPlayer] = rem; setHands(nH); setItemBag(nc); setFactBag(nf);
-    }
     var ns = consecutiveSkips + 1; setConsecutiveSkips(ns);
-    setChain([]); setAnchor(null);
+    var nMP = mustPlay.slice(); nMP[currentPlayer] = true; setMustPlay(nMP);
+    setChain([]); setAnchor(null); setSwapMode(false);
     setGameLog(gameLog.concat([playerNames[currentPlayer] + " skipped"]));
     if (ns >= 2) { enterBonus(); return; }
+    if (itemBag.length === 0 && factBag.length === 0 && !canPlayerMove(hands[0], boardNodes, boardEdges) && !canPlayerMove(hands[1], boardNodes, boardEdges)) { enterBonus(); return; }
+    var next2 = 1 - currentPlayer; setCurrentPlayer(next2); setMessage(playerNames[next2] + "'s turn.");
+  }
+
+  function doSwap() {
+    var hand = hands[currentPlayer]; var cB = itemBag.slice(); var fB = factBag.slice();
+    var sw = chain.slice();
+    if (sw.length === 0) { setSwapMode(false); return; }
+    sw.forEach(function(i) { var t = hand[i]; if (t.type === "item") cB.push(t.index); else fB.push(t.index); });
+    var rem = hand.filter(function(_, i) { return !sw.includes(i); });
+    var nc = shuffle(cB); var nf = shuffle(fB);
+    var cr = sw.filter(function(j) { return hand[j].type === "item"; }).length;
+    var fr = sw.filter(function(j) { return hand[j].type === "fact"; }).length;
+    for (var i = 0; i < cr && nc.length > 0; i++) rem.push({ type: "item", index: nc.pop() });
+    for (var j = 0; j < fr && nf.length > 0; j++) rem.push({ type: "fact", index: nf.pop() });
+    var nH = hands.slice(); nH[currentPlayer] = rem; setHands(nH); setItemBag(nc); setFactBag(nf);
+    var ns = consecutiveSkips + 1; setConsecutiveSkips(ns);
+    var nMP2 = mustPlay.slice(); nMP2[currentPlayer] = false; setMustPlay(nMP2);
+    setChain([]); setAnchor(null); setSwapMode(false);
+    setGameLog(gameLog.concat([playerNames[currentPlayer] + " swapped " + sw.length + " tile" + (sw.length > 1 ? "s" : "")]));
+    if (ns >= 2) { enterBonus(); return; }
+    if (nc.length === 0 && nf.length === 0 && !canPlayerMove(nH[0], boardNodes, boardEdges) && !canPlayerMove(nH[1], boardNodes, boardEdges)) { enterBonus(); return; }
     var next2 = 1 - currentPlayer; setCurrentPlayer(next2); setMessage(playerNames[next2] + "'s turn.");
   }
 
@@ -447,10 +490,10 @@ export default function ConceptLinksGame() {
                 <thead><tr><th style={{ padding: 6, minWidth: 100 }} />
                   {facts.map(function(f, fi) {
                     return (
-                      <th key={fi} style={{ padding: "4px 6px", writingMode: "vertical-lr", textAlign: "left", transform: "rotate(180deg)", maxHeight: 120, color: "#7ecbf5", cursor: "pointer", fontSize: 11 }} onClick={function() { setEditingFact(fi); }}>
+                      <th key={fi} style={{ padding: "4px 6px", writingMode: "vertical-lr", textAlign: "left", transform: "rotate(180deg)", maxHeight: 120, color: FC, cursor: "pointer", fontSize: 11 }} onClick={function() { setEditingFact(fi); }}>
                         {editingFact === fi
                           ? <input autoFocus value={f} onChange={function(e) { var ff = facts.slice(); ff[fi] = e.target.value; setFacts(ff); }} onBlur={function() { setEditingFact(null); }} onKeyDown={function(e) { if (e.key === "Enter") setEditingFact(null); }} onClick={function(e) { e.stopPropagation(); }}
-                              style={{ width: 100, writingMode: "horizontal-tb", transform: "rotate(180deg)", background: "#1a2138", border: "1px solid #7ecbf5", borderRadius: 3, color: "#7ecbf5", padding: "2px 4px", fontSize: 11, fontFamily: "inherit" }} />
+                              style={{ width: 100, writingMode: "horizontal-tb", transform: "rotate(180deg)", background: "#1a2138", border: "1px solid " + FC, borderRadius: 3, color: FC, padding: "2px 4px", fontSize: 11, fontFamily: "inherit" }} />
                           : f}
                       </th>
                     );
@@ -460,10 +503,10 @@ export default function ConceptLinksGame() {
                   {items.map(function(c, ci) {
                     return (
                       <tr key={ci}>
-                        <td style={{ padding: "4px 8px", color: "#fc5c7d", fontWeight: 500, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} onClick={function() { setEditingItem(ci); }}>
+                        <td style={{ padding: "4px 8px", color: IC, fontWeight: 500, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} onClick={function() { setEditingItem(ci); }}>
                           {editingItem === ci
                             ? <input autoFocus value={c} onChange={function(e) { var cc = items.slice(); cc[ci] = e.target.value; setItems(cc); }} onBlur={function() { setEditingItem(null); }} onKeyDown={function(e) { if (e.key === "Enter") setEditingItem(null); }} onClick={function(e) { e.stopPropagation(); }}
-                                style={{ width: 100, background: "#1a2138", border: "1px solid #fc5c7d", borderRadius: 3, color: "#fc5c7d", padding: "2px 4px", fontSize: 11, fontFamily: "inherit" }} />
+                                style={{ width: 100, background: "#1a2138", border: "1px solid " + IC, borderRadius: 3, color: IC, padding: "2px 4px", fontSize: 11, fontFamily: "inherit" }} />
                             : c}
                         </td>
                         {facts.map(function(_, fi) {
@@ -581,9 +624,11 @@ export default function ConceptLinksGame() {
   var hand = hands[currentPlayer];
   var inst = "";
   if (isBonus) {
-    inst = bonusSel.length < 2 ? "Select 2+ board nodes with missing connections. You get 1 turn." : bonusSel.length + " nodes selected. Hit Play.";
+    inst = (bonusSel.length < 2 ? "Select board nodes you think share a missing connection. You get 1 turn." : bonusSel.length + " nodes selected. Hit Play.") + " Wrong connections deduct 5 pts each.";
   } else if (isFirstTurn) {
     inst = "Select 1 item and 1 fact from your hand (order doesn't matter).";
+  } else if (swapMode) {
+    inst = chain.length === 0 ? "Select tiles to swap, then hit Confirm Swap." : chain.length + " tile" + (chain.length > 1 ? "s" : "") + " selected for swap. Hit Confirm Swap or select more.";
   } else if (chain.length === 0) {
     inst = "Click tiles in the order you want to chain them.";
   } else if (!anchor) {
@@ -649,7 +694,7 @@ export default function ConceptLinksGame() {
                 var p = graphPositions[node.id];
                 if (!p) return null;
                 var isItem = node.type === "item";
-                var base = isItem ? "#fc5c7d" : "#7ecbf5";
+                var base = isItem ? IC : FC;
                 var isSel = anchor === node.id || bonusSel.includes(node.id);
                 var sc = isSel ? "#f0c27f" : base;
                 var fc = isSel ? "#f0c27f" : "#151b2b";
@@ -673,7 +718,7 @@ export default function ConceptLinksGame() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {hand.map(function(tile, i) {
                 var isItem = tile.type === "item";
-                var color = isItem ? "#fc5c7d" : "#7ecbf5";
+                var color = isItem ? IC : FC;
                 var label = tn(tile);
                 var chainPos = chain.indexOf(i);
                 var sel = chainPos !== -1;
@@ -713,7 +758,7 @@ export default function ConceptLinksGame() {
           </div>
         )}
 
-        {validity && (
+        {validity && !isBonus && (
           <div style={{
             padding: "8px 14px", marginBottom: 12, borderRadius: 6,
             background: validity.valid ? "rgba(120,200,120,0.1)" : "rgba(252,92,125,0.1)",
@@ -731,10 +776,35 @@ export default function ConceptLinksGame() {
             style={{ padding: "10px 24px", fontSize: 14, fontWeight: 700, fontFamily: MONO, background: canPlay ? GRAD : "#1a2138", color: canPlay ? "#0a0e17" : "#555", border: "none", borderRadius: 8, cursor: canPlay ? "pointer" : "default", opacity: canPlay ? 1 : 0.5 }}>
             Play
           </button>
-          <button onClick={skipTurn} style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#8891a5", border: "1px solid #2a3555", borderRadius: 8, cursor: "pointer" }}>
-            {isBonus ? "Pass" : "Skip / Swap"}
-          </button>
-          {(chain.length > 0 || anchor || bonusSel.length > 0) && (
+          {isBonus ? (
+            <button onClick={skipTurn} style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#8891a5", border: "1px solid #2a3555", borderRadius: 8, cursor: "pointer" }}>
+              Pass
+            </button>
+          ) : swapMode ? (
+            <>
+              <button onClick={doSwap} disabled={chain.length === 0}
+                style={{ padding: "10px 24px", fontSize: 14, fontWeight: 700, fontFamily: MONO, background: chain.length > 0 ? "#1a2138" : "transparent", color: chain.length > 0 ? IC : "#555", border: "1px solid " + (chain.length > 0 ? IC : "#2a3555"), borderRadius: 8, cursor: chain.length > 0 ? "pointer" : "default", opacity: chain.length > 0 ? 1 : 0.5 }}>
+                Confirm Swap
+              </button>
+              <button onClick={function() { setSwapMode(false); setChain([]); setAnchor(null); }}
+                style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#8891a5", border: "1px solid #2a3555", borderRadius: 8, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={skipTurn} disabled={mustPlay[currentPlayer]}
+                title={mustPlay[currentPlayer] ? "You skipped last turn — you must play or swap." : ""}
+                style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: mustPlay[currentPlayer] ? "#333" : "#8891a5", border: "1px solid " + (mustPlay[currentPlayer] ? "#1a2138" : "#2a3555"), borderRadius: 8, cursor: mustPlay[currentPlayer] ? "not-allowed" : "pointer", opacity: mustPlay[currentPlayer] ? 0.4 : 1 }}>
+                Skip
+              </button>
+              <button onClick={function() { setSwapMode(true); setChain([]); setAnchor(null); }}
+                style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#8891a5", border: "1px solid #2a3555", borderRadius: 8, cursor: "pointer" }}>
+                Swap
+              </button>
+            </>
+          )}
+          {!swapMode && (chain.length > 0 || anchor || bonusSel.length > 0) && (
             <button onClick={function() { setChain([]); setAnchor(null); setBonusSel([]); }}
               style={{ padding: "10px 24px", fontSize: 14, fontWeight: 500, fontFamily: MONO, background: "transparent", color: "#fc5c7d", border: "1px solid rgba(252,92,125,0.2)", borderRadius: 8, cursor: "pointer" }}>
               Clear
